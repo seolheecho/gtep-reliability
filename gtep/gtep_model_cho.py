@@ -436,7 +436,7 @@ def add_investment_constraints(
                     * m.thermalCapacity[bus, gen]
                     for gen in m.activeCriticalthermalGenerators[bus, state]
                 ) + sum(
-                    b.transmissionCapacity[line]
+                    m.transmissionCapacity[line]
                     for line in m.transmission if m.transmission[line]["to_bus"] == bus
                 )
         )
