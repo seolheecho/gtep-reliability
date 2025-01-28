@@ -6,7 +6,7 @@
 
 from pyomo.environ import *
 from pyomo.environ import units as u
-from gtep.gtep_model import ExpansionPlanningModel
+from gtep.gtep_model_cho import ExpansionPlanningModelwithReliability
 import logging
 
 import json
@@ -40,7 +40,7 @@ class ExpansionPlanningSolutionwithReliability:
         pass
 
     def load_from_model(self, gtep_model):
-        if type(gtep_model) is not ExpansionPlanningModel:
+        if type(gtep_model) is not ExpansionPlanningModelwithReliability:
             logger.warning(
                 f"Solutions must be loaded from ExpansionPlanningModel objects, not %s"
                 % type(gtep_model)

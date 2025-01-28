@@ -10,7 +10,7 @@ from prescient.data.providers import gmlc_data_provider
 import datetime
 
 
-class ExpansionPlanningData:
+class ExpansionPlanningDataforReliability:
     """Standard data storage class for the IDAES GTEP model."""
 
     def __init__(self):

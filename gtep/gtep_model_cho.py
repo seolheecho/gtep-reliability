@@ -293,7 +293,7 @@ def add_investment_variables(
                             )
     
     def prod_state_limit(b, bus, state):
-        return (0, b.ub_prod_state[[bus, state]])
+        return (0, b.ub_prod_state[bus, state])
     
     # Variable related to reliability
     b.prod_state = Var(m.criticalBuses, m.states, 
@@ -401,7 +401,6 @@ def add_investment_constraints(
         return (
             sum(
                 m.renewableCapacity[gen]
-                * m.renewableCapacityValue[gen]
                 * (b.renewableOperational[gen] + b.renewableInstalled[gen])
                 for gen in m.renewableGenerators
             )
@@ -422,24 +421,35 @@ def add_investment_constraints(
                 sum(
                     m.averageCapacityFactor[bus, gen] 
                     * m.renewableCapacity[gen]
+                    * (b.renewableOperational[gen] + b.renewableInstalled[gen])
                     for gen in m.noncriticalrenewableGenerators[bus]
                 ) + sum(
                     m.averageCapacityFactor[bus, gen] 
                     * m.thermalCapacity[gen]
+                    * (
+                        b.genOperational[gen].indicator_var.get_associated_binary()
+                        + b.genInstalled[gen].indicator_var.get_associated_binary()                        
+                    )
                     for gen in m.noncriticalthermalGenerators[bus]
                 ) + sum(
                     m.averageCapacityFactor[bus, gen] 
-                    * m.renewableCapacity[bus, gen]
+                    * m.renewableCapacity[gen]
+                    * (b.renewableOperational[gen] + b.renewableInstalled[gen])
                     for gen in m.activeCriticalrenewableGenerators[bus, state]
                 ) + sum(
                     m.averageCapacityFactor[bus, gen] 
-                    * m.thermalCapacity[bus, gen]
+                    * m.thermalCapacity[gen]
+                    * (
+                        b.genOperational[gen].indicator_var.get_associated_binary()
+                        + b.genInstalled[gen].indicator_var.get_associated_binary()                        
+                    )
                     for gen in m.activeCriticalthermalGenerators[bus, state]
                 ) + sum(
                     m.transmissionCapacity[line]
                     for line in m.transmission if m.transmission[line]["to_bus"] == bus
                 )
         )
+
 
 
     ## NOTE: The following constraints can be split into rep_per and invest_stage components if desired
@@ -562,33 +572,20 @@ def add_investment_constraints(
         )
 
 
-    # Curtailment penalties for investment period
-    @b.Constraint()
-    def renewable_curtailment_cost(b):
-        capacity_sum = 0
-        for rep_per in b.representativePeriods:
-            for com_per in b.representativePeriod[rep_per].commitmentPeriods:
-                for dis_per in com_per.dispatchPeriods:
-                    capacity_sum += (
-                    b.representativePeriod[rep_per]
-                    .commitPeriod[com_per]
-                    .dispatchPeriod[dis_per]
-                    .capacity
-                )
+    # # Curtailment penalties for investment period
+    # @b.Constraint()
+    # def renewable_curtailment_cost(b):
+    #     capacity_sum = 0
+    #     for rep_per in b.representativePeriods:
+    #         for com_per in b.representativePeriod[rep_per].commitmentPeriods:
+    #             for dis_per in com_per.dispatchPeriods:
+    #                 capacity_sum += (
+    #                 b.representativePeriod[rep_per]
+    #                 .commitPeriod[com_per]
+    #                 .dispatchPeriod[dis_per]
+    #                 .capacity
+    #             )
                     
-
-    # Curtailment penalties for investment period
-    # summation over only representative days
-    @b.Constraint()
-    def renewable_curtailment_cost(b):
-        capacity_sum = 0
-        for rep_per in b.representativePeriods:
-                    capacity_sum += (
-                    b.representativePeriod[rep_per]
-                    .capacity
-                )
-
-                    m.capacity[gen]
 
 
 
@@ -599,7 +596,7 @@ def add_dispatch_variables(
     """Add dispatch-associated variables to representative period block."""
 
     m = b.model()
-    c_p = b.parent_block()  # dispatch -- commitment
+    c_p = b.parent_block()   # dispatch -- commitment
     r_p = c_p.parent_block() # dispatch -- rep
     i_p = r_p.parent_block() # dispatch -- planning stage
 
@@ -882,7 +879,7 @@ def add_dispatch_variables(
     def reliability_check_below(disj, bus, state):
         @disj.Constraint()
         def capacity_smaller_than_limit(disj):
-            return b.prod_state[bus, state] <= m.loads[bus]
+            return i_p.prod_state[bus, state] <= m.loads[bus]
         
         @disj.Constraint()
         def lole_below(disj):
@@ -890,7 +887,7 @@ def add_dispatch_variables(
         
         @disj.Constraint()
         def eens_below(disj):
-            return b.eens[bus, state] == m.loads[bus] - b.prod_state[bus, state]
+            return b.eens[bus, state] == m.loads[bus] - i_p.prod_state[bus, state]
         
     @b.Disjunction(m.criticalBuses, m.states)
     def reliability_logic(disj, bus, state):
@@ -935,9 +932,9 @@ def add_dispatch_variables(
 def add_dispatch_constraints(b, disp_per):
     """Add dispatch-associated inequalities to representative period block."""
     m = b.model()
-    c_p = b.parent_block()
-    r_p = c_p.parent_block()
-    i_p = r_p.parent_block()
+    c_p = b.parent_block()    # commitment block (c_p) is a parent block of current dispatch block (b)
+    r_p = c_p.parent_block()  # representative block (r_p) is a parent block of commitment block (c_p)
+    i_p = r_p.parent_block()  # investment block (i_p) is a parent block of representative block (r_p)
 
     for key in m.loads.keys():
         m.loads[key] *= max(0, rng.normal(0.5, 0.2))
@@ -1019,30 +1016,30 @@ def add_dispatch_constraints(b, disp_per):
     #     )
 
 
-    # Constraints for reliability estimation
-    @b.Constraint(m.criticalBuses)
-    def lole_critical_node(b, bus):
-        return (
-            b.loleBuses[bus] == sum(m.prob[bus, state] * b.lole[bus, state] for state in m.states)
-        )
+    # # Constraints for reliability estimation
+    # @b.Constraint(m.criticalBuses)
+    # def lole_critical_node(b, bus):
+    #     return (
+    #         b.loleBuses[bus] == sum(m.prob[bus, state] * b.lole[bus, state] for state in m.states)
+    #     )
 
-    @b.Constraint(m.noncriticalBuses)
-    def lole_noncritical_node(b, bus):
-        return (
-            b.loleBuses[bus] == 0
-        )
+    # @b.Constraint(m.noncriticalBuses)
+    # def lole_noncritical_node(b, bus):
+    #     return (
+    #         b.loleBuses[bus] == 0
+    #     )
 
-    @b.Constraint(m.criticalBuses)
-    def eens_critical_node(b, bus):
-        return (
-            b.eensBuses[bus] == sum(m.prob[bus, state] * b.lole[bus, state] for state in m.states)
-        )
+    # @b.Constraint(m.criticalBuses)
+    # def eens_critical_node(b, bus):
+    #     return (
+    #         b.eensBuses[bus] == sum(m.prob[bus, state] * b.lole[bus, state] for state in m.states)
+    #     )
 
-    @b.Constraint(m.noncriticalBuses)
-    def eens_noncritical_node(b, bus):
-        return (
-            b.eensBuses[bus] == 0
-        )
+    # @b.Constraint(m.noncriticalBuses)
+    # def eens_noncritical_node(b, bus):
+    #     return (
+    #         b.eensBuses[bus] == 0
+    #     )
 
 
 
@@ -1992,8 +1989,8 @@ def model_data_references(m):
     m.prob = Param(m.criticalBuses, m.states, initialize=init_prob, mutable=True)
 
     m.capacityCriticalGen = Param(m.criticalBuses, m.generators, m.stages, default=0, mutable=True)
-    m.EENSPenalty = Param(default=30)  # CAISO's VOLL
-    m.LOLEPenalty = Param(default=30)  
+    m.EENSPenalty = Param(default=5)  # CAISO's VOLL
+    m.LOLEPenalty = Param(default=5)  
     # (cho) NOTE: LOLE is now penalized in the objective function, but it could be added as a constraint
     # TODO: Correct value for LOLE penlaty should be collected
     m.averageCapacityFactor = Param(m.criticalBuses, m.generators, default=1)
@@ -2120,7 +2117,7 @@ def model_set_declaration(m, stages, rep_per=["a", "b"], com_per=2, dis_per=2):
     )     
 
     # initial_critical_gen = {(i,st): [] for i in m.criticalBuses for st in m.states}
-    initial_critical_renewablegen = {(i,st): [] for i in m.criticalBuses for st in m.states}
+    initial_critical_renewablegen = {i: [] for i in m.criticalBuses}
     m.criticalrenewableGenerators = Set(
         m.criticalBuses,
         within=m.renewableGenerators,
@@ -2129,7 +2126,7 @@ def model_set_declaration(m, stages, rep_per=["a", "b"], com_per=2, dis_per=2):
         doc="Critical renewable generators; subset of all generators, initially empty",
     )     
 
-    initial_noncritical_thermalgen = {(i,st): [] for i in m.noncriticalBuses for st in m.stages}
+    initial_noncritical_thermalgen = {i: [] for i in m.criticalBuses}
     m.noncriticalthermalGenerators = Set(
         m.criticalBuses,
         within=m.thermalGenerators,
@@ -2160,10 +2157,10 @@ def model_set_declaration(m, stages, rep_per=["a", "b"], com_per=2, dis_per=2):
         doc='Active critical thermal generators in the state, initially empty'
     )
 
-    initial_active_critical_renewablegen = {(i,t,st): [] for i in m.criticalBuses for t in m.stages for st in m.states}
-    m.activeCriticalGenerators = Set(
+    initial_active_critical_renewablegen = {(i,st): [] for i in m.criticalBuses for st in m.states}
+    m.activeCriticalrenewableGenerators = Set(
         m.criticalBuses, m.states,
-        within=m.generators,
+        within=m.renewableGenerators,
         initialize=initial_active_critical_renewablegen,
         ordered=False,
         doc='Active critical renewable generators in the state, initially empty'

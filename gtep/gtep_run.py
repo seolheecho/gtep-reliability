@@ -1,6 +1,6 @@
-from gtep.gtep_model_cho import ExpansionPlanningModelwithReliability
-from gtep.gtep_data_cho import ExpansionPlanningDataforReliability
-from gtep.gtep_solution_cho import ExpansionPlanningSolutionwithReliability
+from gtep.gtep_model import ExpansionPlanningModel
+from gtep.gtep_data import ExpansionPlanningData
+from gtep.gtep_solution import ExpansionPlanningSolution
 from pyomo.core import TransformationFactory
 from pyomo.contrib.appsi.solvers.highs import Highs
 from pyomo.contrib.appsi.solvers.gurobi import Gurobi
@@ -10,10 +10,10 @@ import csv, os
 
 
 data_path = "./gtep/data/5bus"
-data_object = ExpansionPlanningDataforReliability()
+data_object = ExpansionPlanningData()
 data_object.load_prescient(data_path)
 
-mod_object = ExpansionPlanningModelwithReliability(
+mod_object = ExpansionPlanningModel(
     stages=2,
     data=data_object.md,
     num_reps=2,
@@ -33,7 +33,7 @@ mod_object.results = opt.solve(mod_object.model, tee=True)
 # Specify the output directory and filename
 output_dir = "output"  # Change to your desired directory
 os.makedirs(output_dir, exist_ok=True)  # Create directory if it doesn't exist
-output_file = os.path.join(output_dir, "optimal_variable_values_with_reliability.csv")
+output_file = os.path.join(output_dir, "optimal_variable_values_wo_reliability.csv")
 
 results = []
 for var in mod_object.model.component_objects(Var, active=True):
