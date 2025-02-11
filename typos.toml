@@ -1,0 +1,4 @@
+[default.extend-words]
+opf = "opf"
+inquries = "inquries"
+nd = "nd"
