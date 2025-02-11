@@ -274,6 +274,28 @@ def add_investment_variables(
         within=NonNegativeReals, initialize=0, units=u.USD
     )
 
+    # Upperbounds_productions = {}
+    # for bus in m.criticalBuses:
+    #     for state in m.states:
+    #         Upperbounds_productions[bus, state] = (
+    #             sum(
+    #                 m.renewableCapacity[renewableGen]
+    #                 for renewableGen in m.noncriticalrenewableGenerators[bus])
+    #             + sum(
+    #                 m.thermalCapacity[thermalGen] 
+    #                 for thermalGen in m.noncriticalthermalGenerators[bus])
+    #             + sum(
+    #                 m.renewableCapacity[renewableGen]
+    #                 for renewableGen in m.criticalrenewableGenerators[bus])      
+    #             + sum(
+    #                 m.thermalCapacity[thermalGen] 
+    #                 for thermalGen in m.criticalthermalGenerators[bus])
+    #             + sum(
+    #                 m.transmissionCapacity[line]
+    #                 for line in m.transmission if m.transmission[line]["to_bus"] == bus
+    #             )               
+    #         )
+
     Upperbounds_productions = {}
     for bus in m.buses:
         for state in m.states:
@@ -287,7 +309,7 @@ def add_investment_variables(
                 + sum(
                     m.transmissionCapacity[line]
                     for line in m.transmission if m.transmission[line]["to_bus"] == bus
-                )    
+                )               
             )
 
     b.ub_prod_state = Param(m.buses, m.states,
@@ -400,27 +422,8 @@ def add_investment_constraints(
     #     )
         
 
-    # @b.Constraint(m.criticalBuses, m.generators)
-    # def capacity_limit(b, bus, gen):
-    #     return (
-    #         sum(
-    #             m.renewableCapacity[gen]
-    #             * (b.renewableOperational[gen] + b.renewableInstalled[gen])
-    #             for gen in m.renewableGenerators
-    #         )
-    #         + sum(
-    #             m.thermalCapacity[gen]
-    #             * (
-    #                 b.genOperational[gen].indicator_var.get_associated_binary()
-    #                 + b.genInstalled[gen].indicator_var.get_associated_binary()
-    #             )
-    #             for gen in m.thermalGenerators
-    #         )
-    #         >= m.capacityCriticalGen[bus, gen, investment_stage]
-    #     )
-    
     @b.Constraint(m.criticalBuses, m.states)
-    def available_capacity_state(b, bus, state):
+    def available_production_state(b, bus, state):
         return (b.prod_state[bus, state] ==
                 sum(
                     m.averageCapacityFactor[gen] 
@@ -450,6 +453,10 @@ def add_investment_constraints(
                     for gen in m.activeCriticalthermalGenerators[bus, state]
                 ) + sum(
                     m.transmissionCapacity[line]
+                    * (
+                        b.branchOperational[line].indicator_var.get_associated_binary()
+                        + b.branchInstalled[line].indicator_var.get_associated_binary()                        
+                    )
                     for line in m.transmission if m.transmission[line]["to_bus"] == bus
                 )
         )
@@ -1044,7 +1051,6 @@ def add_dispatch_constraints(b, disp_per):
         return (
             b.eensBuses[bus] == 0
         )
-
 
 
 
@@ -1985,43 +1991,16 @@ def model_data_references(m):
         for gen in m.generators 
     }
     
-    init_prob = {}
-    init_prob['bus3',1] = 0.9
-    init_prob['bus3',2] = 0.1
-    init_prob['bus3',3] = 1
-    init_prob['bus3',4] = 1
-    init_prob['bus3',5] = 1
-    init_prob['bus3',6] = 1
-    init_prob['bus3',7] = 1
-    init_prob['bus3',8] = 1
-    init_prob['bus4',1] = 0.81
-    init_prob['bus4',2] = 0.09
-    init_prob['bus4',3] = 0.09
-    init_prob['bus4',4] = 0.01
-    init_prob['bus4',5] = 1
-    init_prob['bus4',6] = 1
-    init_prob['bus4',7] = 1
-    init_prob['bus4',8] = 1
-    m.prob = Param(m.criticalBuses, m.states, initialize=init_prob, mutable=True)
+    m.prob = Param(m.criticalBuses, m.states, initialize=1, mutable=True)
 
     m.EENSPenalty = Param(default=5)  # CAISO's VOLL
     m.LOLEPenalty = Param(default=5)  
     # (cho) NOTE: LOLE is now penalized in the objective function, but it could be added as a constraint
     # TODO: Correct value for LOLE penlaty should be collected
-
-    init_factor = {}
-    init_factor['10_PV'] = 0
-    init_factor['10_STEAM'] = 0.18
-    init_factor['1_HYDRO'] = 0.49
-    init_factor['2_RTPV'] = 0
-    init_factor['3_CT'] = 0.59
-    init_factor['4_CC'] = 0.63
-    init_factor['4_STEAM'] = 0.56
-    init_factor['4_WIND'] = 0.63
-    m.averageCapacityFactor = Param(m.generators, initialize=init_factor)
+    m.averageCapacityFactor = Param(m.generators, initialize=1, mutable=True)
     # (cho) TODO: This average capacity factor should be updated depending on type of generators
 
-    m.capacityCriticalGen = Param(m.criticalBuses, m.generators, m.stages, default=0, mutable=True)
+    # m.CriticalgeneratorProduction = Param(m.generators, default=0, mutable=True)
 
 
 def model_set_declaration(m, stages, rep_per=["a", "b"], com_per=2, dis_per=2):
@@ -2118,86 +2097,45 @@ def model_set_declaration(m, stages, rep_per=["a", "b"], com_per=2, dis_per=2):
                    doc="capacity failure states"
     )
     
-    # TODO: for now, hard-coded. should be changed
     m.criticalBuses = Set(
         within=m.buses,
-        initialize=['bus3','bus4'],
         doc="Critical buses; subset of buses, the top one bus with the largest demand"
-        # TODO: it should be updated to flexibly select the number of critical buses
     )
 
-    # TODO: for now, hard-coded. should be changed
     m.noncriticalBuses = Set(
         within=m.buses,
-        initialize=['bus1','bus2','bus10'],
         doc="Non-critical buses; subset of buses, remaining sets"
     )
     
-    # initial_critical_gen = {(i,st): [] for i in m.criticalBuses for st in m.states}
-    initial_critical_thermalgen = {'bus3': {'3_CT'}, 'bus4': {'4_CC'}}
+    m.criticalGenerators = Set(
+        m.criticalBuses,
+        within=m.generators,
+        doc="Critical generators; subset of all generators, initially empty",
+    )    
+
     m.criticalthermalGenerators = Set(
         m.criticalBuses,
         within=m.thermalGenerators,
-        initialize=initial_critical_thermalgen,
-        ordered=False,
         doc="Critical thermal generators; subset of all generators, initially empty",
     )     
 
-    # initial_critical_gen = {(i,st): [] for i in m.criticalBuses for st in m.states}
-    initial_critical_renewablegen = {'bus3': {}, 'bus4': {'4_WIND'}}
     m.criticalrenewableGenerators = Set(
         m.criticalBuses,
         within=m.renewableGenerators,
-        initialize=initial_critical_renewablegen,
-        ordered=False,
         doc="Critical renewable generators; subset of all generators, initially empty",
     )     
 
-    initial_noncritical_thermalgen = {'bus3': {}, 'bus4': {'4_STEAM'}}
-    m.noncriticalthermalGenerators = Set(
-        m.criticalBuses,
-        within=m.thermalGenerators,
-        initialize=initial_noncritical_thermalgen,
-        ordered=False,
-        doc="Non-critical thermal generators; subset of all generators, initially empty",
-    ) 
+    m.noncricritical
 
-    initial_noncritical_renewablegen = {i: [] for i in m.criticalBuses}
-    m.noncriticalrenewableGenerators = Set(
-        m.criticalBuses,
-        within=m.renewableGenerators,
-        initialize=initial_noncritical_renewablegen,
-        ordered=False,
-        doc="Non-critical renewable generators; subset of all generators, initially empty",
-    )     
-
-    # initial_active_critical_gen = {(i,t,st): [] for i in m.criticalBuses for t in m.stages for st in m.states}
-    initial_active_critical_thermalgen = {
-        ('bus4',1): {'4_CC'}, ('bus4',2): {'4_CC'}, 
-        ('bus4',3): {}, ('bus4',4): {}, ('bus4',5): {}, 
-        ('bus4',6): {}, ('bus4',7): {}, ('bus4',8): {},
-        ('bus3',1): {'3_CT'}, ('bus3',2): {}, ('bus3',3): {}, ('bus3',4): {}, 
-        ('bus3',5): {}, ('bus3',6): {}, ('bus3',7): {}, ('bus3',8): {}
-    }
     m.activeCriticalthermalGenerators = Set(
         m.criticalBuses, m.states,
         within=m.thermalGenerators,
-        initialize=initial_active_critical_thermalgen,
-        ordered=False,
         doc='Active critical thermal generators in the state, initially empty'
     )
 
-    initial_active_critical_renewablegen = {        
-        ('bus4',1): {'4_WIND'}, ('bus4',2): {}, 
-        ('bus4',3): {'4_WIND'}, ('bus4',4): {},('bus4',5): {},('bus4',6): {},
-        ('bus4',7): {},('bus4',8): {}, ('bus3',1): {}, ('bus3',2): {}, ('bus3',3): {},
-        ('bus3',4): {}, ('bus3',5): {}, ('bus3',6): {},('bus3',7): {},('bus3',8): {}
-    }
     m.activeCriticalrenewableGenerators = Set(
         m.criticalBuses, m.states,
         within=m.renewableGenerators,
-        initialize=initial_active_critical_renewablegen,
-        ordered=False,
         doc='Active critical renewable generators in the state, initially empty'
     )
 

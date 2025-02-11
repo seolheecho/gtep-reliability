@@ -1,18 +1,20 @@
-from gtep.gtep_model import ExpansionPlanningModel
 from gtep.gtep_model_cho import ExpansionPlanningModelwithReliability
-from gtep.gtep_data_cho import ExpansionPlanningData
-from gtep.gtep_solution_cho import ExpansionPlanningSolution
+from gtep.gtep_data_cho import ExpansionPlanningDataforReliability
+from gtep.gtep_solution_cho import ExpansionPlanningSolutionwithReliability
 from pyomo.core import TransformationFactory
 from pyomo.contrib.appsi.solvers.highs import Highs
 from pyomo.contrib.appsi.solvers.gurobi import Gurobi
 import gurobipy as gp
+import pyomo.environ as pyo
+from pyomo.environ import SolverFactory, Var, Expression
+import csv, os
 
 
 data_path = "./gtep/data/5bus"
-data_object = ExpansionPlanningData()
+data_object = ExpansionPlanningDataforReliability()
 data_object.load_prescient(data_path)
 
-mod_object = ExpansionPlanningModel(
+mod_object = ExpansionPlanningModelwithReliability(
     stages=2,
     data=data_object.md,
     num_reps=2,
@@ -23,39 +25,42 @@ mod_object = ExpansionPlanningModel(
 mod_object.create_model()
 TransformationFactory("gdp.bound_pretransformation").apply_to(mod_object.model)
 TransformationFactory("gdp.bigm").apply_to(mod_object.model)
-# opt = SolverFactory("gurobi")
+opt = SolverFactory("gurobi")
 # opt = Gurobi()
-opt = Highs()
-# # mod_object.results = opt.solve(mod_object.model, tee=True)
-mod_object.results = opt.solve(mod_object.model)
+# opt = Highs()
+# mod_object.results = opt.solve(mod_object.model, tee=True)
+mod_object.results = opt.solve(mod_object.model, tee=True)
 
-sol_object = ExpansionPlanningSolution()
-sol_object.load_from_model(mod_object)
-sol_object.dump_json("./gtep_solution_reliability.json")
+# results = []
+# for var in mod_object.model.component_objects(Var, active=True):
+#     var_name = var.name
+#     for index in var:
+#         value = var[index].value
+#         results.append((f"{var_name}[{index}]", value))
 
-# sol_object.import_data_object(data_object)
+# for expr in mod_object.model.component_objects(Expression, active=True):
+#     expr_name = expr.name
+#     for index in expr:
+#         try:
+#             value = expr[index]()
+#             results.append((f"{expr_name}[{index}]", value))
+#         except ValueError:
+#             results.append((f"{expr_name}[{index}]", None))
 
-# sol_object.read_json("./gtep_lots_of_buses_solution.json")  # "./gtep/data/WECC_USAEE"
-# sol_object.read_json("./gtep_11bus_solution.json")  # "./gtep/data/WECC_Reduced_USAEE"
-# sol_object.read_json("./gtep_solution.json")
-# sol_object.read_json("./updated_gtep_solution_test.json")
-# sol_object.read_json("./gtep_wiggles.json")
-# sol_object.plot_levels(save_dir="./plots/")
+# with open("optimal_variable_values_with_reliability.csv", "w", newline="") as file:
+#     writer = csv.writer(file)
+#     writer.writerow(["Name", "Value"])  # Header row
+#     for row in results:
+#         writer.writerow(row)
 
-# save_numerical_results = False
-# if save_numerical_results:
-
-#     sol_object = ExpansionPlanningSolution()
-
-#     sol_object.load_from_model(mod_object)
-#     sol_object.dump_json()
-# load_numerical_results = False
-# if load_numerical_results:
-#     # sol_object.read_json("./gtep_solution.json")
-#     sol_object.read_json("./bigger_longer_wigglier_gtep_solution.json")
-# plot_results = False
-# if plot_results:
-#     sol_object.plot_levels(save_dir="./plots/")
+# sol_object = ExpansionPlanningSolutionwithReliability()
+# sol_object.load_from_model(mod_object)
+# sol_object.dump_json("./gtep_solution_reliability.json")
 
 
-pass
+for stage in mod_object.model.investmentStage:
+    for bus in mod_object.model.criticalBuses:
+        for state in mod_object.model.states:
+            print("bus", bus, "state", state, "stage", stage, "production", 
+                  mod_object.model.investmentStage[stage].prod_state[bus, state].value)
+
