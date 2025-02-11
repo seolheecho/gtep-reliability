@@ -66,9 +66,9 @@ class ExpansionPlanningSolution:
         }
 
         self.variables = {
-        expr.name: value(expr)
-        for expr in gtep_model.model.component_data_objects(Expression)
-        if ("Commitment" in expr.name) or ("Investment" in expr.name)
+            expr.name: value(expr)
+            for expr in gtep_model.model.component_data_objects(Expression)
+            if ("Commitment" in expr.name) or ("Investment" in expr.name)
         }
 
     def import_data_object(self, data_obj):

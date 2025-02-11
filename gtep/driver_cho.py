@@ -61,6 +61,13 @@ mod_object.results = opt.solve(mod_object.model, tee=True)
 for stage in mod_object.model.investmentStage:
     for bus in mod_object.model.criticalBuses:
         for state in mod_object.model.states:
-            print("bus", bus, "state", state, "stage", stage, "production", 
-                  mod_object.model.investmentStage[stage].prod_state[bus, state].value)
-
+            print(
+                "bus",
+                bus,
+                "state",
+                state,
+                "stage",
+                stage,
+                "production",
+                mod_object.model.investmentStage[stage].prod_state[bus, state].value,
+            )

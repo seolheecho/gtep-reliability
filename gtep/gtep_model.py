@@ -4,7 +4,7 @@
 # date: 01/04/2024
 # Model available at http://www.optimization-online.org/DB_FILE/2017/08/6162.pdf
 
-from pyomo.environ import * 
+from pyomo.environ import *
 from pyomo.environ import units as u
 
 # from pyomo.gdp import *
@@ -478,8 +478,8 @@ def add_dispatch_variables(
 
     m = b.model()
     c_p = b.parent_block()  # dispatch -- commitment
-    r_p = c_p.parent_block() # dispatch -- rep
-    i_p = r_p.parent_block() # dispatch -- planning stage
+    r_p = c_p.parent_block()  # dispatch -- rep
+    i_p = r_p.parent_block()  # dispatch -- planning stage
 
     # Define bounds on thermal generator active generation
     def thermal_generation_limits(b, thermalGen):
@@ -755,7 +755,6 @@ def add_dispatch_constraints(b, disp_per):
             b.renewableGeneration[renewableGen] + b.renewableCurtailment[renewableGen]
             == m.renewableCapacity[renewableGen]
         )
-
 
     ## TODO: (@jkskolf) add renewableExtended to this and anywhere else
     @b.Constraint(m.renewableGenerators)
