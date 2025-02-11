@@ -197,11 +197,11 @@ for expr in mod_object_rel.model.component_objects(Expression):
         except ValueError:
             results_rel.append((f"{expr_name}[{index}]", None))
 
-with open("optimal_variable_values_with_reliability.csv", "w", newline="") as file:
-    writer = csv.writer(file)
-    writer.writerow(["Name", "Value"])  # Header row
-    for row in results_rel:
-        writer.writerow(row)
+# with open("optimal_variable_values_with_reliability.csv", "w", newline="") as file:
+#     writer = csv.writer(file)
+#     writer.writerow(["Name", "Value"])  # Header row
+#     for row in results_rel:
+#         writer.writerow(row)
 
 
 
